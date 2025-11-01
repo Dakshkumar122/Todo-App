@@ -1,371 +1,259 @@
-    /* -------------------- App logic -------------------- */
-    (function(){
-      // DOM
-      const bg = document.getElementById('bg');
-      const searchEl = document.getElementById('search');
-      const listEl = document.getElementById('list');
-      const emptyEl = document.getElementById('empty');
-      const addBtn = document.getElementById('addBtn');
-      const newBtn = document.getElementById('newBtn');
-      const titleEl = document.getElementById('title');
-      const projSelect = document.getElementById('projSelect');
-      const projectsEl = document.getElementById('projects');
-      const priorityEl = document.getElementById('priority');
-      const dueEl = document.getElementById('due');
-      const exportBtn = document.getElementById('exportBtn');
-      const importBtn = document.getElementById('importBtn');
-      const fileImport = document.getElementById('fileImport');
-      const addProjBtn = document.getElementById('addProj');
-      const themeBtn = document.getElementById('themeBtn');
-      const sortEl = document.getElementById('sort');
-      const STORAGE = 'aurora_todo_v1';
+// --- Simple, Readable Todo App JS ---
 
-      // State
-      let state = {
-        meta: { theme: 'dark' },
-        projects: [{ id: 'p_inbox', name: 'Inbox', color: '#7c3aed' }],
-        tasks: [],
-      };
-      let filter = 'all';
-      let undoStack = [];
+// 🔹 Select HTML elements
+const taskInput = document.getElementById('taskInput');
+const addBtn = document.getElementById('addBtn');
+const listEl = document.getElementById('list');
+const searchEl = document.getElementById('search');
+const filters = document.querySelectorAll('.filter');
+const leftCount = document.getElementById('leftCount');
+const clearAll = document.getElementById('clearAll');
+const sortBy = document.getElementById('sortBy');
 
-      // Utilities
-      const uid = (pre='id') => pre + '_' + Math.random().toString(36).slice(2,9);
-      const todayISODate = () => new Date().toISOString().slice(0,10);
-      const save = () => {
-        try{ localStorage.setItem(STORAGE, JSON.stringify(state)); }catch(e){}
-      };
-      const pushUndo = () => { undoStack.unshift(JSON.parse(JSON.stringify(state))); if(undoStack.length>12) undoStack.pop(); }
-      const loadState = () => {
-        try{
-          const raw = localStorage.getItem(STORAGE);
-          if(raw){ state = JSON.parse(raw); }
-        }catch(e){}
-      };
+//  Yeh line check karti hai ki agar localStorage me tasks already saved hain toh unhe load karo,
+//warna ek empty array [] se start karo.
+const STORAGE_KEY = 'polished_todos_v1';
+let tasks = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
-      // Initialize
-      loadState();
-      applyTheme();
-      renderProjects();
-      renderList();
+// save() — har baar task change hone pe storage me dubara save karta hai.
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
 
-      /* ---------- Canvas background (particles + lines) ---------- */
-      (function canvasBG(){
-        const ctx = bg.getContext('2d');
-        let w = bg.width = innerWidth;
-        let h = bg.height = innerHeight;
-        let nodes = [];
-        const NODE_COUNT = Math.max(14, Math.floor((w*h)/90000));
-        function rand(a,b){return Math.random()*(b-a)+a}
-        function make(){
-          nodes = [];
-          for(let i=0;i<NODE_COUNT;i++){
-            nodes.push({ x:rand(0,w), y:rand(0,h), vx:rand(-0.25,0.25), vy:rand(-0.25,0.25), r:rand(1.4,3.6) });
-          }
-        }
-        function resize(){
-          w = bg.width = innerWidth; h = bg.height = innerHeight; make();
-        }
-        function draw(){
-          ctx.clearRect(0,0,w,h);
-          // soft gradient overlay
-          const g = ctx.createLinearGradient(0,0,w,h);
-          if(state.meta.theme === 'light'){
-            g.addColorStop(0,'rgba(250,252,255,0.85)');
-            g.addColorStop(1,'rgba(240,248,255,0.8)');
-          } else {
-            g.addColorStop(0,'rgba(6,9,20,0.25)');
-            g.addColorStop(1,'rgba(10,14,25,0.35)');
-          }
-          ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+// uid() — har task ko ek unique ID deta hai (time + random string).
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
 
-          // connections
-          for(let i=0;i<nodes.length;i++){
-            const a = nodes[i];
-            for(let j=i+1;j<nodes.length;j++){
-              const b = nodes[j];
-              const dx = a.x-b.x, dy = a.y-b.y;
-              const d2 = dx*dx + dy*dy;
-              if(d2 < 12000){
-                const aphi = 0.12 - (d2/12000)/1.2;
-                ctx.strokeStyle = state.meta.theme === 'light' ? `rgba(30,40,60,${aphi})` : `rgba(140,160,255,${aphi})`;
-                ctx.lineWidth = 0.6;
-                ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-              }
-            }
-          }
+// User ne jo likha hai wo ek new object ke form me array me store hota hai:
+function addTask(text) {
+  if (!text || !text.trim()) return;
 
-          // nodes
-          for(let n of nodes){
-            n.x += n.vx; n.y += n.vy;
-            if(n.x<0||n.x>w) n.vx *= -1;
-            if(n.y<0||n.y>h) n.vy *= -1;
-            ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
-            ctx.fillStyle = state.meta.theme === 'light' ? 'rgba(20,30,60,0.06)' : 'rgba(160,180,255,0.06)';
-            ctx.fill();
-          }
-          requestAnimationFrame(draw);
-        }
-        make(); draw();
-        window.addEventListener('resize', resize);
-      })();
+  tasks.push({
+    id: uid(),
+    text: text.trim(),
+    done: false,
+    created: Date.now()
+  });
+//Phir save() call hota hai (data save karne ke liye) aur render() UI ko update karta hai.
+  save();
+  render();
+}
 
-      /* ---------- Render ---------- */
-      function renderProjects(){
-        // select options
-        projSelect.innerHTML = '';
-        projectsEl.innerHTML = '';
-        state.projects.forEach(p=>{
-          const opt = document.createElement('option'); opt.value = p.id; opt.textContent = p.name;
-          projSelect.appendChild(opt);
+// 🔹 Delete task
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id !== id);
+  save();
+  render();
+}
 
-          const row = document.createElement('div'); row.className = 'proj';
-          const meta = document.createElement('div'); meta.className = 'meta';
-          const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = p.color;
-          const name = document.createElement('div'); name.textContent = p.name;
-          meta.appendChild(dot); meta.appendChild(name);
-          const right = document.createElement('div'); right.style.fontSize='13px'; right.style.color='var(--muted)';
-          right.textContent = state.tasks.filter(t=>t.projectId===p.id).length;
-          row.appendChild(meta); row.appendChild(right);
-          projectsEl.appendChild(row);
-        });
-      }
+// 🔹 Toggle task complete/incomplete
+function toggleDone(id) {
+  tasks = tasks.map(t => t.id === id ? { ...t, done: !t.done } : t);
+  save();
+  render();
+}
 
-      function renderList(){
-        // filter & sort
-        const q = searchEl.value.trim().toLowerCase();
-        let items = state.tasks.slice();
+// 🔹 Edit task text
+function editTask(id, newText) {
+  tasks = tasks.map(t => t.id === id ? { ...t, text: newText.trim() } : t);
+  save();
+  render();
+}
 
-        // filter
-        const now = todayISODate();
-        items = items.filter(t=>{
-          if(filter==='active') return !t.done;
-          if(filter==='done') return t.done;
-          if(filter==='today') return t.due === now;
-          if(filter==='high') return Number(t.priority) === 1;
-          return true;
-        });
+// 🔹 Sirf un tasks ko rakhta hai jo complete nahi hue, aur baaki delete kar deta hai.
+clearAll.addEventListener('click', () => {
+  tasks = tasks.filter(t => !t.done);
+  save();
+  render();
+});
 
-        // search fuzzy
-        if(q){
-          items = items.filter(t => {
-            return (t.title + ' ' + (t.notes||'') + ' ' + (t.tags||'').join(' ')).toLowerCase().includes(q);
-          });
-        }
+// 🔹 Add button + Enter key event
+addBtn.addEventListener('click', () => {
+  addTask(taskInput.value);
+  taskInput.value = '';
+  taskInput.focus();
+});
 
-        // sort
-        if(sortEl.value === 'priority'){
-          items.sort((a,b)=>a.priority - b.priority);
-        } else if(sortEl.value === 'duedate'){
-          items.sort((a,b)=>{
-            if(!a.due) return 1;
-            if(!b.due) return -1;
-            return new Date(a.due) - new Date(b.due);
-          });
-        } else { // recent
-          items.sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt));
-        }
+taskInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    addTask(taskInput.value);
+    taskInput.value = '';
+  }
+});
 
-        // render
-        listEl.innerHTML = '';
-        if(items.length === 0){
-          emptyEl.style.display = 'block';
-          return;
-        } else emptyEl.style.display = 'none';
+// 🔹 Search feature
+//Jaise hi user kuch type karta hai, render() fir se chalega aur filter karega.
+searchEl.addEventListener('input', render);
 
-        items.forEach((t, idx)=>{
-          const item = document.createElement('div'); item.className = 'task'; item.draggable = true; item.dataset.id = t.id;
-          // left
-          const left = document.createElement('div'); left.className = 'left';
-          const chk = document.createElement('div'); chk.className = 'chk'; chk.title = 'Toggle complete';
-          chk.innerHTML = t.done ? '✓' : '';
-          if(t.done) chk.classList.add('done');
-          chk.addEventListener('click', ()=>{
-            pushUndo(); t.done = !t.done; save(); renderList();
-          });
-          left.appendChild(chk);
+// 🔹 Filter (All / Active / Completed)
+//User kisi filter pe click kare to wo filter activate ho jata hai aur list uske according dikhai deti hai.
+let activeFilter = 'all';
 
-          const content = document.createElement('div'); content.className = 'content';
-          const titleLine = document.createElement('div'); titleLine.className = 'title-line';
-          const title = document.createElement('div'); title.className = 'task-title'; title.textContent = t.title;
-          if(t.done) title.classList.add('done');
+filters.forEach(btn => btn.addEventListener('click', () => {
+  filters.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = btn.dataset.filter;
 
-          const rightActions = document.createElement('div'); rightActions.className = 'task-actions';
-          const editBtn = document.createElement('button'); editBtn.className = 'icon-btn'; editBtn.title='Edit';
-          editBtn.innerHTML = '✎'; editBtn.addEventListener('click', ()=> openEditor(t));
-          const delBtn = document.createElement('button'); delBtn.className = 'icon-btn'; delBtn.title='Delete';
-          delBtn.innerHTML = '🗑'; delBtn.addEventListener('click', ()=> {
-            if(!confirm('Delete this task?')) return;
-            pushUndo(); state.tasks = state.tasks.filter(x=>x.id !== t.id); save(); renderList();
-          });
-          rightActions.appendChild(editBtn); rightActions.appendChild(delBtn);
+  filters.forEach(b =>
+    b.setAttribute('aria-selected', b.classList.contains('active'))
+  );
 
-          titleLine.appendChild(title); titleLine.appendChild(rightActions);
+  render();
+}));
 
-          const notes = document.createElement('div'); notes.className = 'task-notes'; notes.textContent = t.notes || '';
-          const metaRight = document.createElement('div'); metaRight.className = 'meta-right';
+// 🔹 Sort (Newest / Oldest / Alphabetical)
+sortBy.addEventListener('change', render);
 
-          // tags: project, priority, due
-          const tagProj = document.createElement('div'); tagProj.className = 'tag'; tagProj.textContent = (state.projects.find(p=>p.id===t.projectId)||{}).name || 'Inbox';
-          const tagPri = document.createElement('div'); tagPri.className = 'tag'; tagPri.textContent = 'P' + t.priority;
-          metaRight.appendChild(tagProj); metaRight.appendChild(tagPri);
+// 🔹 Render UI
+function render() {
+  const query = (searchEl.value || '').toLowerCase();
+  let filtered = [...tasks];
 
-          if(t.due){ const td = document.createElement('div'); td.className='tag'; td.textContent = 'Due ' + t.due; metaRight.appendChild(td); }
+  // Filter by status
+  if (activeFilter === 'active') filtered = filtered.filter(t => !t.done);
+  if (activeFilter === 'completed') filtered = filtered.filter(t => t.done);
 
-          // assemble
-          content.appendChild(titleLine);
-          if(t.notes) content.appendChild(notes);
-          content.appendChild(metaRight);
+  // Search by keyword
+  if (query) filtered = filtered.filter(t => t.text.toLowerCase().includes(query));
 
-          item.appendChild(left); item.appendChild(content);
+  // Sort by selected option
+  const sortType = sortBy.value;
+  if (sortType === 'new') filtered.sort((a, b) => b.created - a.created);
+  if (sortType === 'old') filtered.sort((a, b) => a.created - b.created);
+  if (sortType === 'alpha') filtered.sort((a, b) => a.text.localeCompare(b.text));
 
-          // drag & drop handlers
-          item.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', t.id); item.classList.add('dragging');
-            // create ghost
-            const ghost = item.cloneNode(true);
-            ghost.style.position='absolute'; ghost.style.top='-9999px'; document.body.appendChild(ghost);
-            e.dataTransfer.setDragImage(ghost, 20, 20);
-          });
-          item.addEventListener('dragend', ()=> { item.classList.remove('dragging'); Array.from(document.querySelectorAll('.placeholder')).forEach(n=>n.remove()); });
+  // Clear current list
+  listEl.innerHTML = '';
 
-          item.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const dragging = document.querySelector('.dragging');
-            if(!dragging || dragging === item) return;
-            const rect = item.getBoundingClientRect();
-            const after = (e.clientY - rect.top) > rect.height / 2;
-            let placeholder = item.nextSibling && item.nextSibling.classList && item.nextSibling.classList.contains('placeholder') ? item.nextSibling : null;
-            if(!placeholder){
-              placeholder = document.createElement('div'); placeholder.className='placeholder'; placeholder.style.height = rect.height + 'px';
-            }
-            placeholder.style.background = 'linear-gradient(90deg, rgba(124,58,237,0.06), rgba(6,182,212,0.04))';
-            if(after) item.after(placeholder); else item.before(placeholder);
-          });
+  // If no tasks available
+  if (filtered.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'muted-small';
+    empty.style.padding = '18px';
+    empty.style.textAlign = 'center';
+    empty.textContent = 'No tasks yet — add your first task!';
+    listEl.appendChild(empty);
+    return;
+  }
 
-          item.addEventListener('drop', (e)=>{
-            e.preventDefault();
-            const id = e.dataTransfer.getData('text/plain');
-            const dragging = state.tasks.find(x=>x.id===id);
-            if(!dragging) return;
-            const nodes = Array.from(listEl.querySelectorAll('.task')).filter(n=>!n.classList.contains('dragging'));
-            const placeholders = document.querySelectorAll('.placeholder');
-            let targetIndex = state.tasks.findIndex(x=>x.id === t.id);
-            // if placeholder exists and is after, increment index
-            if(placeholders.length){
-              const ph = placeholders[0];
-              const siblings = Array.from(listEl.querySelectorAll('.task, .placeholder'));
-              const idx = siblings.indexOf(ph);
-              // count tasks before idx
-              let count = 0;
-              for(let i=0;i<idx;i++) if(siblings[i].classList && siblings[i].classList.contains('task')) count++;
-              targetIndex = count;
-            }
-            pushUndo();
-            // reorder in state.tasks by id:
-            const from = state.tasks.findIndex(x=>x.id===id);
-            if(from === -1) return;
-            const [itm] = state.tasks.splice(from,1);
-            state.tasks.splice(targetIndex,0,itm);
-            save(); renderList();
-          });
+  // Build task list
+  filtered.forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'todo fade';
 
-          listEl.appendChild(item);
-        });
-      }
+    const left = document.createElement('div');
+    left.className = 'left';
 
-      /* ---------- Events ---------- */
-      addBtn.addEventListener('click', createFromInput);
-      newBtn.addEventListener('click', () => { titleEl.focus(); });
-      searchEl.addEventListener('input', () => renderList());
-      sortEl.addEventListener('change', renderList);
-      document.querySelectorAll('.filter').forEach(btn=>{
-        btn.addEventListener('click', (e)=>{
-          document.querySelectorAll('.filter').forEach(b=>b.classList.remove('active'));
-          e.target.classList.add('active');
-          filter = e.target.dataset.filter; renderList();
-        });
-      });
-      addProjBtn.addEventListener('click', ()=>{
-        const name = prompt('Project name') || '';
-        if(!name) return;
-        pushUndo(); state.projects.push({ id: uid('p'), name, color: randomColor() }); save(); renderProjects(); renderList();
+    // Checkbox
+    const cb = document.createElement('div');
+    cb.className = 'checkbox' + (t.done ? ' checked' : '');
+    cb.setAttribute('role', 'checkbox');
+    cb.setAttribute('aria-checked', t.done);
+    cb.addEventListener('click', () => toggleDone(t.id));
+    cb.innerHTML = t.done ? '&#10003;' : '';
+
+    // Task text
+    const center = document.createElement('div');
+    center.style.flex = '1';
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = t.text;
+    title.title = 'Double click to edit';
+
+    if (t.done) {
+      title.style.textDecoration = 'line-through';
+      title.style.opacity = '0.7';
+    }
+
+    title.setAttribute('tabindex', 0);
+
+    // Double-click to edit
+    title.addEventListener('dblclick', () => {
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = t.text;
+      inp.className = 'input';
+      inp.style.padding = '8px';
+      center.replaceChild(inp, title);
+      inp.focus();
+
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finishEdit();
+        if (e.key === 'Escape') cancelEdit();
       });
 
-      // export/import
-      exportBtn.addEventListener('click', ()=> {
-        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'todo-export.json'; a.click();
-        URL.revokeObjectURL(url);
-      });
-      importBtn.addEventListener('click', ()=> fileImport.click());
-      fileImport.addEventListener('change', (e)=>{
-        const f = e.target.files[0]; if(!f) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          try{
-            const data = JSON.parse(ev.target.result);
-            if(!confirm('Replace current tasks with imported data?')) return;
-            pushUndo(); state = data; save(); applyTheme(); renderProjects(); renderList();
-          }catch(err){ alert('Invalid file'); }
-        };
-        reader.readAsText(f);
-        fileImport.value = '';
-      });
+      inp.addEventListener('blur', finishEdit);
 
-      // theme toggle
-      themeBtn.addEventListener('click', ()=> {
-        pushUndo(); state.meta.theme = state.meta.theme === 'light' ? 'dark' : 'light'; applyTheme(); save();
-      });
-
-      // keyboard shortcuts
-      window.addEventListener('keydown', (e) => {
-        if(e.key === 'n'){ e.preventDefault(); titleEl.focus(); return; }
-        if((e.ctrlKey||e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); if(undoStack.length){ state = undoStack.shift(); save(); applyTheme(); renderProjects(); renderList(); } return; }
-      });
-
-      // create task
-      function createFromInput(){
-        const txt = titleEl.value.trim();
-        if(!txt) { titleEl.focus(); return; }
-        pushUndo();
-        const t = {
-          id: uid('t'), title: txt, notes: '', projectId: projSelect.value || state.projects[0].id,
-          priority: Number(priorityEl.value || 2), due: dueEl.value || null,
-          createdAt: new Date().toISOString(), done: false
-        };
-        state.tasks.unshift(t); titleEl.value=''; dueEl.value=''; save(); renderList();
+      function finishEdit() {
+        const newVal = inp.value.trim();
+        if (newVal && newVal !== t.text) editTask(t.id, newVal);
+        else render();
       }
 
-      function openEditor(task){
-        // simple inline edit modal using prompt for speed & compatibility
-        const newTitle = prompt('Edit title', task.title);
-        if(newTitle === null) return;
-        pushUndo();
-        task.title = newTitle.trim() || task.title;
-        const newNotes = prompt('Notes (optional)', task.notes || '') ;
-        if(newNotes !== null) task.notes = newNotes;
-        save(); renderList();
+      function cancelEdit() {
+        render();
       }
+    });
 
-      // random color generator for project dot
-      function randomColor(){ const palette = ['#7c3aed','#06b6d4','#ef4444','#f59e0b','#10b981','#3b82f6','#ec4899']; return palette[Math.floor(Math.random()*palette.length)]; }
+    // Meta info (date/time)
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const dt = new Date(t.created);
+    meta.textContent = dt.toLocaleString();
 
-      // apply theme
-      function applyTheme(){
-        if(state.meta && state.meta.theme === 'light') document.documentElement.setAttribute('data-theme','light'); else document.documentElement.removeAttribute('data-theme');
-      }
+    center.appendChild(title);
+    center.appendChild(meta);
+    left.appendChild(cb);
+    left.appendChild(center);
 
-      // initial demo data if empty
-      if(state.tasks.length === 0){
-        state.tasks.push({
-          id: uid('t'), title: 'Welcome — try shortcuts, drag & drop', notes: 'Press "n" to focus new task. Try export/import and theme toggle.', projectId: state.projects[0].id, priority:1, due: '', createdAt: new Date().toISOString(), done:false
-        });
-        save();
-      }
+    // Actions (edit + delete)
+    const actions = document.createElement('div');
+    actions.className = 'actions';
 
-      // expose some functions for debugging (optional)
-      window._aurora = { state, save, renderList, renderProjects };
+    const editBtn = document.createElement('button');
+    editBtn.className = 'icon-btn';
+    editBtn.title = 'Edit';
+    editBtn.innerHTML = '✏️';
+    editBtn.addEventListener('click', () =>
+      title.dispatchEvent(new MouseEvent('dblclick'))
+    );
 
-    })();
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn';
+    delBtn.title = 'Delete';
+    delBtn.innerHTML = '🗑️';
+    delBtn.addEventListener('click', () => {
+      if (confirm('Delete this task?')) deleteTask(t.id);
+    });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    // Final task layout
+    item.appendChild(left);
+    item.appendChild(actions);
+    listEl.appendChild(item);
+  });
+
+  // Update remaining tasks count
+  const leftTasks = tasks.filter(t => !t.done).length;
+  leftCount.textContent = `${leftTasks} ${leftTasks === 1 ? 'task' : 'tasks'} left`;
+}
+
+// 🔹 Initial render
+render();
+
+// 🔹 Keyboard shortcuts (Ctrl+K for search)
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    searchEl.focus();
+    searchEl.select();
+  }
+  if (e.key === 'Escape') {
+    searchEl.blur();
+    taskInput.blur();
+  }
+});

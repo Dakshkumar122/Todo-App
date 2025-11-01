@@ -1,97 +1,70 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Aurora • Advanced Vanilla JS Todo</title>
-  <meta name="description" content="Advanced To-Do app in plain HTML/CSS/JS with canvas background, animations, localStorage, drag & drop, export/import." />
-  <link rel="stylesheet" href="style.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Polished Todo App — HTML / CSS / JS</title>
+    <meta name="description"
+        content="A small, interview-ready Todo app with add/edit/delete, filters, search and localStorage persistence." />
+        <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <!-- Canvas background -->
-  <canvas class="bg-canvas" id="bg"></canvas>
-  <div class="grain"></div>
-
-  <div class="wrap">
-    <div class="card">
-      <header class="app-head">
-        <div class="brand">
-          <div class="logo">A</div>
-          <div>
-            <h1>Aurora — Advanced Todo</h1>
-            <div class="sub">Vanilla HTML • CSS • JS — Smooth animations & polished UI</div>
-          </div>
-        </div>
-
-        <div class="controls">
-          <input id="search" class="search" placeholder="Search tasks, tags, notes..." />
-          <button id="themeBtn" class="btn ghost" title="Toggle theme">Toggle</button>
-          <button id="importBtn" class="btn ghost">Import</button>
-          <button id="exportBtn" class="btn">Export</button>
-          <button id="newBtn" class="btn primary">New</button>
-        </div>
-      </header>
-
-      <div class="grid">
-        <!-- Sidebar -->
-        <aside class="aside-left card" style="padding:14px">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
-            <strong>Projects</strong>
-            <button id="addProj" class="btn ghost small">+ add</button>
-          </div>
-
-          <div class="projects" id="projects"></div>
-
-          <div style="margin-top:12px">
-            <div class="muted" style="margin-bottom:8px">Filters</div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap">
-              <button class="btn ghost small filter" data-filter="all">All</button>
-              <button class="btn ghost small filter" data-filter="active">Pending</button>
-              <button class="btn ghost small filter" data-filter="done">Completed</button>
-              <button class="btn ghost small filter" data-filter="today">Due today</button>
-              <button class="btn ghost small filter" data-filter="high">High priority</button>
+    <main class="wrap">
+        <header>
+            <div class="logo">TD</div>
+            <div>
+                <h1> Todo App</h1>
+                <p class="lead">Todo App — add, edit, search, filter and persist tasks
+                    locally.</p>
             </div>
-          </div>
-        </aside>
+        </header>
 
-        <!-- Main content -->
-        <section class="card" style="padding:16px">
-          <div class="task-input">
-            <input id="title" class="title" placeholder="What will you accomplish?" />
-            <div class="task-meta">
-              <select id="projSelect" class="small" style="color: black;"></select>
-              <select id="priority" class="small" title="Priority" style="color: black;">
-                <option value="1">P1</option>
-                <option value="2">P2</option>
-                <option value="3">P3</option>
-              </select>
-              <input id="due" type="date" class="small" />
-              <button id="addBtn" class="btn primary">Add</button>
+        <section class="card" aria-labelledby="app-heading">
+            <h2 id="app-heading"
+                style="position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden;">Todo
+                application</h2>
+
+            <div class="controls">
+                <div class="input-group">
+                    <input id="taskInput" class="input" type="text"
+                        placeholder="Add a new task — press Enter or click Add" aria-label="New task" />
+                    <button id="addBtn" class="btn" aria-label="Add task">Add</button>
+                </div>
+                <input id="search" class="input" style="max-width:220px" type="text" placeholder="Search tasks"
+                    aria-label="Search tasks" />
+                <button id="clearAll" class="ghost icon-btn" title="Clear completed">Clear Completed</button>
             </div>
-          </div>
 
-          <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px">
-            <div class="muted">Sort</div>
-            <select id="sort" class="small" style="color: black;">
-              <option value="recent">Newest</option>
-              <option value="priority">Priority</option>
-              <option value="duedate">Due date</option>
-            </select>
-            <div style="flex:1"></div>
-            <div class="muted">Drag to reorder • Press "n" = new • Ctrl/Cmd+Z = undo</div>
-          </div>
+            <div class="top-row">
+                <div class="filters" role="tablist" aria-label="Filter tasks">
+                    <button class="filter active" data-filter="all" role="tab" aria-selected="true">All</button>
+                    <button class="filter" data-filter="active" role="tab">Active</button>
+                    <button class="filter" data-filter="completed" role="tab">Completed</button>
+                </div>
 
-          <div id="list" class="task-list" aria-live="polite"></div>
-          <div id="empty" class="empty" style="display:none">No tasks yet — add your first task ✨</div>
+                <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                    <div class="muted-small">Sort:</div>
+                    <select id="sortBy" class="input" style="max-width:180px; padding:8px">
+                        <option value="new">Newest first</option>
+                        <option value="old">Oldest first</option>
+                        <option value="alpha">A → Z</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="list" class="list" aria-live="polite"></div>
+
+            <div class="countline">
+                <div id="leftCount">0 tasks left</div>
+                <div class="muted-small">Tip: Double-click a task title to edit it.</div>
+            </div>
         </section>
-      </div>
 
-      <footer>Made by ✨ —  "Daksh Kumar"</footer>
-    </div>
-  </div>
-
-  <!-- hidden file input for import -->
-  <input id="fileImport" type="file" accept="application/json" style="display:none" />
-<script src="script.js"></script>
+        <p style="color:var(--muted); font-size:13px; margin-top:10px">Build by Daksh Kumar</p>
+    </main>
+    <script src="script.js"></script>
 </body>
+
 </html>
