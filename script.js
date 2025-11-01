@@ -238,6 +238,7 @@ function render() {
   });
 
   // Update remaining tasks count
+  // Kitne tasks bache hain, wo bottom me show karta hai.
   const leftTasks = tasks.filter(t => !t.done).length;
   leftCount.textContent = `${leftTasks} ${leftTasks === 1 ? 'task' : 'tasks'} left`;
 }
@@ -246,6 +247,7 @@ function render() {
 render();
 
 // 🔹 Keyboard shortcuts (Ctrl+K for search)
+//Ctrl + K press karne pe search bar focus me aa jata hai (professional touch ✨).
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
